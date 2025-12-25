@@ -16,6 +16,7 @@ interface ModalState {
   type: EntryType;
   entryId?: string;
   amount: string;
+  hours: string; // Saat bilgisi modal'a eklendi
   note: string;
   title: string;
 }
@@ -23,11 +24,10 @@ interface ModalState {
 const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [modal, setModal] = useState<ModalState>({ 
-    isOpen: false, userId: '', type: 'CUSTOM', amount: '', note: '', title: ''
+    isOpen: false, userId: '', type: 'CUSTOM', amount: '', hours: '', note: '', title: ''
   });
   const [busy, setBusy] = useState(false);
   const [errorInfo, setErrorInfo] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const formatDisplayDate = (isoDate: string) => {
@@ -46,6 +46,7 @@ const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
       type,
       entryId: entry?.id,
       amount: entry ? Math.abs(entry.amount).toString() : '',
+      hours: entry?.hours ? entry.hours.toString() : '',
       note: entry?.note || (
         type === 'EXPENSE' ? 'Harcama' : 
         type === 'PAYMENT' ? 'Ödeme' : 
@@ -58,6 +59,7 @@ const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
 
   const handleModalSubmit = async () => {
     const rawAmount = parseFloat(modal.amount);
+    const rawHours = parseFloat(modal.hours);
     if (isNaN(rawAmount)) return;
 
     setBusy(true);
@@ -72,6 +74,7 @@ const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
         userId: modal.userId,
         type: modal.type,
         amount: finalAmount,
+        hours: isNaN(rawHours) ? undefined : rawHours,
         date: selectedDate,
         note: modal.note
       };
@@ -118,6 +121,7 @@ const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
         userId,
         type,
         amount,
+        hours, // Saat bilgisi burada kaydediliyor
         date: selectedDate,
         note
       };
@@ -291,9 +295,15 @@ const AdminPuantaj: React.FC<Props> = ({ users, entries, setEntries }) => {
                 <button onClick={() => setModal({...modal, isOpen: false})} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X size={24} /></button>
               </div>
               <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Tutar (TL)</label>
-                  <input type="number" autoFocus disabled={busy} className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none font-black text-2xl transition-all" value={modal.amount} onChange={e => setModal({...modal, amount: e.target.value})} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Tutar (TL)</label>
+                    <input type="number" autoFocus disabled={busy} className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none font-black text-2xl transition-all" value={modal.amount} onChange={e => setModal({...modal, amount: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Saat (Opsiyonel)</label>
+                    <input type="number" disabled={busy} className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl outline-none font-black text-2xl transition-all text-indigo-400" placeholder="0" value={modal.hours} onChange={e => setModal({...modal, hours: e.target.value})} />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Not</label>

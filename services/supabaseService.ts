@@ -7,79 +7,37 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const SQL_FIX = `GRANT USAGE ON SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.entries DISABLE ROW LEVEL SECURITY;`;
-
 export const db = {
   getUsers: async (): Promise<User[]> => {
-    console.log("[DB] Personeller getiriliyor...");
     const { data, error } = await supabase.from('users').select('*');
-    if (error) {
-      console.error("[DB] Personel Getirme Hatası:", error);
-      throw new Error(`VERI_ALINAMADI: ${error.message} (Kod: ${error.code})`);
-    }
+    if (error) throw error;
     return (data || []).map(u => ({
       id: u.id,
       name: u.name,
       role: u.role,
       hourlyRate: Number(u.hourly_rate),
+      password: u.password,
       avatar: u.avatar
     }));
   },
   
   upsertUser: async (user: User) => {
-    console.log("[DB] Personel kaydediliyor/güncelleniyor:", user.id);
     const { error } = await supabase.from('users').upsert({
       id: user.id,
       name: user.name,
       role: user.role,
       hourly_rate: user.hourlyRate,
+      password: user.password,
       avatar: user.avatar
     });
-    if (error) {
-      console.error("[DB] Upsert Hatası:", error);
-      throw error;
-    }
+    if (error) throw error;
   },
 
   deleteUser: async (id: string) => {
-    console.log("[DB] Personel silme işlemi başlatıldı:", id);
-    
-    // 1. Önce personelin kayıtlarını temizle
-    const { data: eData, error: eError } = await supabase
-      .from('entries')
-      .delete()
-      .eq('user_id', id)
-      .select();
-    
-    if (eError) {
-      console.error("[DB] Kayıt silme hatası:", eError);
-      throw new Error(`KAYIT_TEMIZLEME_FAIL: ${eError.message}`);
-    }
-
-    // 2. Personeli sil
-    const { data: uData, error: uError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', id)
-      .select();
-    
-    if (uError) {
-      console.error("[DB] Personel silme hatası:", uError);
-      if (uError.code === '42501') {
-        throw new Error(`PERM_DENIED: Yetki Hatası! SQL Editor'de tamir kodunu çalıştır kanka.`);
-      }
-      throw new Error(`PERSONEL_SILME_FAIL: ${uError.message}`);
-    }
-
-    if (!uData || uData.length === 0) {
-      console.warn("[DB] Silme başarılı dendi ama 0 satır etkilendi. RLS engeli!");
-      throw new Error(`RLS_BLOCK: Supabase silme izni vermedi. Veri hala duruyor.`);
-    }
-    
-    console.log("[DB] Personel başarıyla silindi.");
+    const { error: eError } = await supabase.from('entries').delete().eq('user_id', id);
+    if (eError) throw eError;
+    const { error: uError } = await supabase.from('users').delete().eq('id', id);
+    if (uError) throw uError;
     return true;
   },
 
@@ -91,6 +49,7 @@ export const db = {
       userId: e.user_id,
       type: e.type,
       amount: Number(e.amount),
+      hours: e.hours ? Number(e.hours) : undefined,
       date: e.date,
       note: e.note
     }));
@@ -102,6 +61,7 @@ export const db = {
       user_id: entry.userId,
       type: entry.type,
       amount: entry.amount,
+      hours: entry.hours,
       date: entry.date,
       note: entry.note
     });
@@ -109,29 +69,40 @@ export const db = {
   },
 
   deleteEntry: async (id: string) => {
-    console.log("[DB] Kayıt siliniyor:", id);
-    const { data, error } = await supabase
-      .from('entries')
-      .delete()
-      .eq('id', id)
-      .select();
-    
-    if (error) {
-      console.error("[DB] Kayıt silme hatası:", error);
-      throw new Error(`KAYIT_SILME_FAIL: ${error.message}`);
-    }
-
-    if (!data || data.length === 0) {
-      throw new Error("RLS_BLOCK: Kayıt silinemedi (RLS Engeli).");
-    }
-    console.log("[DB] Kayıt silindi.");
+    const { error } = await supabase.from('entries').delete().eq('id', id).select();
+    if (error) throw error;
   },
 
-  wipeAllData: async (adminId: string) => {
-    const { error: eError } = await supabase.from('entries').delete().neq('id', 'WIPE_PROTECT');
-    if (eError) throw eError;
+  deleteTipsByDate: async (date: string) => {
+    const { error } = await supabase
+      .from('entries')
+      .delete()
+      .eq('date', date)
+      .eq('type', 'TIP');
+    if (error) throw error;
+  },
 
-    const { error: uError } = await supabase.from('users').delete().neq('id', adminId);
-    if (uError) throw uError;
+  exportAllData: async () => {
+    const { data: users } = await supabase.from('users').select('*');
+    const { data: entries } = await supabase.from('entries').select('*');
+    return {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      users: users || [],
+      entries: entries || []
+    };
+  },
+
+  importAllData: async (snapshot: any) => {
+    if (!snapshot.users || !snapshot.entries) throw new Error("Geçersiz yedek dosyası kanka!");
+    if (snapshot.users.length > 0) {
+      const { error: uError } = await supabase.from('users').upsert(snapshot.users);
+      if (uError) throw uError;
+    }
+    if (snapshot.entries.length > 0) {
+      const { error: eError } = await supabase.from('entries').upsert(snapshot.entries);
+      if (eError) throw eError;
+    }
+    return true;
   }
 };

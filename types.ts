@@ -4,13 +4,14 @@ export enum UserRole {
   STAFF = 'STAFF'
 }
 
-export type EntryType = '5H' | '8H' | 'CUSTOM' | 'EXPENSE' | 'PAYMENT';
+export type EntryType = '5H' | '8H' | 'CUSTOM' | 'EXPENSE' | 'PAYMENT' | 'TIP';
 
 export interface User {
   id: string;
   name: string;
   role: UserRole;
   hourlyRate: number;
+  password?: string;
   avatar?: string;
 }
 
@@ -19,6 +20,7 @@ export interface PuantajEntry {
   userId: string;
   type: EntryType;
   amount: number;
+  hours?: number; // Bahşiş dağıtımı için gerekli olan saat bilgisi
   date: string;
   note?: string;
 }
